@@ -2,10 +2,9 @@ import { Page, Locator, expect } from '@playwright/test'
 import { TestLogger } from '../utils/testLogger'
 import { generateRandomEmail } from '../utils/helpers'
 import { constants } from '../utils/testData'
-import { captureActiveValidation } from '../utils/helpers'
-import { TIMEOUT } from 'node:dns'
+import { captureValidation, captureActiveValidation } from '../utils/helpers'
 
-export class UserDetails {
+export class formregistration {
 
     readonly page: Page;
     readonly title: Locator;
@@ -22,15 +21,20 @@ export class UserDetails {
     readonly city: Locator
     readonly zipcode: Locator
     readonly mobile: Locator
-    readonly createAccount: Locator
+    readonly createAccountbutton: Locator
     readonly continue: Locator
     readonly logout: Locator
     readonly loginEmail: Locator
     readonly loginPassword: Locator
     readonly loginButton: Locator
     readonly successMessage: Locator
+    readonly loginemailid: Locator
+    
 
-    readonly credentials: { email: string; password: string };
+    readonly credentials: { email: string; };
+
+    givenEmail: string = '';
+    givenPassword: string = '';
 
     constructor(page: Page) {
         this.page = page;
@@ -48,21 +52,42 @@ export class UserDetails {
         this.city = page.getByRole('textbox', { name: 'City * Zipcode *' });
         this.zipcode = page.locator('#zipcode');
         this.mobile = page.getByRole('textbox', { name: 'Mobile Number *' });
-        this.createAccount = page.getByRole('button', { name: 'Create Account' });
+        this.createAccountbutton = page.getByRole('button', { name: 'Create Account' });
         this.continue = page.getByRole('link', { name: 'Continue' });
         this.logout = page.getByRole('link', { name: ' Logout' });
         this.loginEmail = page.locator("//input[@data-qa='login-email']");
         this.loginPassword = page.locator("//input[@data-qa='login-password']");
         this.loginButton = page.getByRole('button', { name: 'Login' });
         this.successMessage = page.locator("//h2[@data-qa='account-created']//b");
+        this.loginemailid = page.locator('#email');
+        
 
         this.credentials = generateRandomEmail();
     }
 
-    async UserDetails() {
+    async givencreds(): Promise<{ givenPassword: string }> {
+        this.givenEmail = await this.credentials.email;
+
+        let givenPassword = '';
+        const match = this.givenEmail.match(/^([a-zA-Z]+).*(\d{4})@/);
+        if (match) {
+            const prefix = match[1];      // "user"
+            const lastFour = match[2];    // "3184"
+
+            TestLogger.info(`Extracted components: Prefix is ${prefix}, Suffix is ${lastFour}`);
+
+            // You can now combine them if you want: "user3184"
+            this.givenPassword = `${prefix}${lastFour}`;
+        }
+
+        TestLogger.success(`Successfully captured email text: ${this.givenEmail}`);
+        return { givenPassword: this.givenPassword };
+    }
+
+    async errorCapturing() {
 
         TestLogger.info("Clicking 'Create Account' with empty fields to trigger error...");
-        await this.createAccount.click();
+        await this.createAccountbutton.click();
         TestLogger.info('Reading the error message...');
         const result = await captureActiveValidation(this.page);
         TestLogger.output('Error found in field', result.fieldName);
@@ -71,13 +96,16 @@ export class UserDetails {
         expect(result.validationMessage).toBe('Please fill out this field.');
         TestLogger.success('Error message text matches.');
 
+    }
+
+    async UserDetails() {
 
         TestLogger.info("Selecting the 'Mr.' title checkbox...");
         await this.title.click();
 
-        TestLogger.info('Entering the password...');
-        await this.password.fill(this.credentials.password);
-        TestLogger.success(`Entered name: ${this.credentials.password}`);
+        TestLogger.info('Entering the given password...');
+        await this.password.fill(this.givenPassword);
+        TestLogger.success(`Entered name: ${this.givenPassword}`);
 
         TestLogger.info('Selecting Date of Birth from dropdowns...');
 
@@ -102,8 +130,11 @@ export class UserDetails {
         await this.mobile.fill(constants.mobileNumber);
         TestLogger.success('Form filled completely.');
 
+    }
+
+    async createAccount() {
         TestLogger.info("Clicking the 'Create Account' button...");
-        await this.createAccount.click();
+        await this.createAccountbutton.click();
     }
 
 
@@ -114,9 +145,6 @@ export class UserDetails {
         // await this.successMessage.waitFor({ state: 'visible', timeout: 5000 });
         TestLogger.info('Checking for success message on screen...');
         // await expect(this.successMessage).toBeVisible();
-
-
-
         TestLogger.success('Account created successfully!');
     }
 
@@ -128,29 +156,37 @@ export class UserDetails {
 
     async loginCreds() {
         TestLogger.info('Entering the saved login details...');
-        await this.loginEmail.fill(this.credentials.email);
-        TestLogger.success(`Entered name: ${this.credentials.email}`);
-        await this.loginPassword.fill(this.credentials.password);
-    TestLogger.success(`Entered name: ${this.credentials.password}`);
+        await this.loginEmail.fill(this.givenEmail);
+        TestLogger.success(`Entered name: ${this.givenEmail}`);
+        await this.loginPassword.fill(this.givenPassword);
+        TestLogger.success(`Entered name: ${this.givenPassword}`);
     }
 
-    async login() {
-        TestLogger.info("Clicking the final 'Login' button...");
-        await this.loginButton.click();
+    
+
+
+    async validateAccountPage(): Promise<boolean> {
+        try {
+            TestLogger.info("Validating that the signup page/form is displayed...");
+
+            await this.page.waitForURL('**/account_created', { timeout: 5000 });
+            const currentUrl = this.page.url();
+            if (currentUrl === constants.accountPage) {
+                TestLogger.success(`Successfully redirected to signup page: ${currentUrl}`);
+                return true;
+            } else {
+                TestLogger.error(`Redirection failed. Expected: ${constants.accountPage}, but got: ${currentUrl}`);
+                return false;
+            }
+        } catch (error) {
+            const result = await captureActiveValidation(this.page);
+
+            TestLogger.output('Error found in field:', result.fieldName);
+            TestLogger.output('The error message says:', result.validationMessage);
+            return false;
+        }
     }
-
-
-    //     async getFormValidationError() {
-    //        TestLogger.info("Clicking 'Create Account' with empty fields to trigger error...");
-    //     await this.createAccount.click();
-    //     TestLogger.info('Reading the error message...');
-    //     const result = await captureActiveValidation(this.page);
-    //     TestLogger.output('Error found in field', result.fieldName);
-    //     TestLogger.output('The error message says', result.validationMessage);
-    //     TestLogger.info('Checking if error message text is correct...');
-    //     expect(result.validationMessage).toBe('Please fill out this field.');
-    //     TestLogger.success('Error message text matches.');
-    // }
 
 
 }
+

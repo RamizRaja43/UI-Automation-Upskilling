@@ -22,7 +22,8 @@ test('User SignUp', async ({ page }) => {
 
     await test.step('Enter Sign-Up Values', async () => {
 
-        await homePage.signUpCredentials();
+        await homePage.signUpName();
+        await homePage.signUpEmail();
         TestLogger.success('Test complete! Form fields filled successfully.');
     })
 })
